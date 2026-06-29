@@ -140,13 +140,50 @@ async function sendWhatsApp(instance: string, jid: string, text: string) {
   if (!res.ok) throw new Error(`Evolution HTTP ${res.status}: ${(await res.text()).slice(0, 120)}`);
 }
 
-async function sendEmail(to: string, subject: string, text: string) {
+async function sendEmail(to: string, subject: string, text: string, html?: string) {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${RESEND_KEY}` },
-    body: JSON.stringify({ from: RESEND_FROM, to, subject, text }),
+    body: JSON.stringify({ from: RESEND_FROM, to, subject, text, ...(html ? { html } : {}) }),
   });
   if (!res.ok) throw new Error(`Resend HTTP ${res.status}: ${(await res.text()).slice(0, 120)}`);
+}
+
+const esc = (s: string) => String(s ?? '').replace(/[&<>"]/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+
+// Monta o corpo HTML do e-mail de cobrança (CSS inline — exigência de e-mail).
+function emailHtml(r: any): string {
+  const linha = r.linha_digitavel ? `
+    <p style="margin:24px 0 6px;font-size:12px;color:#5E7A78;text-transform:uppercase;letter-spacing:.06em">Linha digitável</p>
+    <div style="font-family:monospace;font-size:15px;color:#0F2A2A;background:#F3F7F6;border:1px solid #DCE6E5;border-radius:8px;padding:14px 16px;word-break:break-all">${esc(r.linha_digitavel)}</div>` : '';
+  const pix = r.codigo_pix ? `
+    <p style="margin:20px 0 6px;font-size:12px;color:#5E7A78;text-transform:uppercase;letter-spacing:.06em">PIX copia e cola</p>
+    <div style="font-family:monospace;font-size:12px;color:#0F2A2A;background:#F3F7F6;border:1px solid #DCE6E5;border-radius:8px;padding:14px 16px;word-break:break-all">${esc(r.codigo_pix)}</div>` : '';
+  const botao = r.link_boleto ? `
+    <div style="margin:28px 0 4px"><a href="${esc(r.link_boleto)}" style="display:inline-block;background:#0E7C7B;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:13px 28px;border-radius:10px">Ver boleto completo</a></div>` : '';
+  return `<!doctype html><html><body style="margin:0;background:#E4ECEB;padding:24px 0;font-family:Arial,Helvetica,sans-serif">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #DCE6E5;border-radius:16px;overflow:hidden">
+    <div style="background:#0F2A2A;padding:22px 32px;color:#fff;font-size:20px;font-weight:700;letter-spacing:-.3px">Sindi<span style="color:#159392">Track</span></div>
+    <div style="padding:32px">
+      <p style="margin:0 0 16px;font-size:16px;color:#0F2A2A">Olá, <b>${esc(r.empresa_razao_social || '')}</b>!</p>
+      <p style="margin:0 0 20px;font-size:15px;color:#1C3D3C;line-height:1.5">Segue o boleto referente a <b>${esc(r.referencia || '')}</b>.</p>
+      <table style="width:100%;border-collapse:collapse;margin:8px 0 4px">
+        <tr>
+          <td style="padding:14px 16px;background:#F3F7F6;border:1px solid #DCE6E5;border-radius:8px 0 0 8px">
+            <div style="font-size:12px;color:#5E7A78;text-transform:uppercase;letter-spacing:.06em">Valor</div>
+            <div style="font-size:22px;font-weight:700;color:#0E7C7B;margin-top:2px">${brl(r.valor)}</div>
+          </td>
+          <td style="padding:14px 16px;background:#F3F7F6;border:1px solid #DCE6E5;border-left:0;border-radius:0 8px 8px 0">
+            <div style="font-size:12px;color:#5E7A78;text-transform:uppercase;letter-spacing:.06em">Vencimento</div>
+            <div style="font-size:22px;font-weight:700;color:#0F2A2A;margin-top:2px">${dataBR(r.data_vencimento) || '—'}</div>
+          </td>
+        </tr>
+      </table>
+      ${linha}${pix}${botao}
+      <p style="margin:28px 0 0;font-size:12px;color:#5E7A78;line-height:1.5;border-top:1px solid #DCE6E5;padding-top:16px">Em caso de dúvidas, responda este e-mail. Se o pagamento já foi efetuado, desconsidere.</p>
+    </div>
+  </div></body></html>`;
 }
 
 Deno.serve(async (req) => {
@@ -355,7 +392,7 @@ Deno.serve(async (req) => {
         try {
           if (!RESEND_KEY || !RESEND_FROM) throw new Error('Resend não configurado (RESEND_API_KEY/RESEND_FROM)');
           if (!to) throw new Error('Sem e-mail');
-          await sendEmail(to, preencheTemplate(cfg!.template_email_assunto, rec), preencheTemplate(cfg!.template_email_corpo, rec));
+          await sendEmail(to, preencheTemplate(cfg!.template_email_assunto, rec), preencheTemplate(cfg!.template_email_corpo, rec), emailHtml(rec));
           await logar('email', to, true);
         } catch (e) { await logar('email', to, false, String((e as Error).message)); }
       }
