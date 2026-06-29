@@ -55,7 +55,7 @@ function mapEmpresa(r: any) {
 
 const num = (v: any) => (v == null || v === '' ? null : Number(v));
 
-function mapRecebimento(r: any, tipoPorCobranca: Record<number, string>) {
+function mapRecebimento(r: any, tipoPorCobranca: Record<number, string>, validosPatronal: number[]) {
   const a = r.attributes ?? {};
   const ent = a.entidade ?? {};
   const cobId = a.cobranca?.id != null ? Number(a.cobranca.id) : null;
@@ -66,13 +66,17 @@ function mapRecebimento(r: any, tipoPorCobranca: Record<number, string>) {
   else if (a.data_pagamento) st = 'pago';
   else if (a.data_vencimento && a.data_vencimento < hoje) st = 'vencido';
   else st = 'aberto';
+  // Regra: patronal só vale com valor válido; senão é cadastro errado → mensalidade.
+  let tipo = cobId != null ? (tipoPorCobranca[cobId] ?? null) : null;
+  const v = num(a.valor);
+  if (tipo === 'patronal' && v != null && !validosPatronal.includes(v)) tipo = 'mensalidade';
   return {
     higestor_id: Number(r.id),
     empresa_higestor_id: ent.id != null ? Number(ent.id) : null,
     empresa_cpf_cnpj: ent.cpf_cnpj ?? null,
     empresa_razao_social: ent.razao_social ?? null,
     empresa_associado: !!ent.associado,
-    tipo: cobId != null ? (tipoPorCobranca[cobId] ?? null) : null,
+    tipo,
     cobranca_id: cobId,
     referencia: a.referencia ?? null,
     mes_referencia: a.mes_referencia || null,
@@ -244,11 +248,12 @@ Deno.serve(async (req) => {
     if (action === 'sync-recebimentos') {
       // Mapa cobranca_id → tipo, a partir da config (mensalidade eletrônica 7590 também conta como mensalidade)
       const { data: cfg } = await admin.from('config')
-        .select('cobranca_id_mensalidade, cobranca_id_patronal').eq('id', 1).maybeSingle();
+        .select('cobranca_id_mensalidade, cobranca_id_patronal, valores_patronal_validos').eq('id', 1).maybeSingle();
       const tipoPorCobranca: Record<number, string> = {};
       if (cfg?.cobranca_id_mensalidade) tipoPorCobranca[Number(cfg.cobranca_id_mensalidade)] = 'mensalidade';
       if (cfg?.cobranca_id_patronal) tipoPorCobranca[Number(cfg.cobranca_id_patronal)] = 'patronal';
       tipoPorCobranca[7590] = 'mensalidade';
+      const validosPatronal: number[] = (cfg?.valores_patronal_validos ?? [800, 1200, 2400]).map(Number);
 
       // Filtros opcionais. Cron incremental: dias_pagamento define a janela de pagamentos recentes.
       const f: string[] = [];
@@ -273,7 +278,7 @@ Deno.serve(async (req) => {
         if (total === null) total = lastOffset(data.links);
         if (rows.length === 0) { offset = -1; break; }
 
-        const mapped = rows.map((r: any) => mapRecebimento(r, tipoPorCobranca));
+        const mapped = rows.map((r: any) => mapRecebimento(r, tipoPorCobranca, validosPatronal));
         const { error } = await admin.from('recebimentos').upsert(mapped, { onConflict: 'higestor_id' });
         if (error) return json({ error: 'upsert recebimentos: ' + error.message, processadas }, 500);
         processadas += mapped.length;
