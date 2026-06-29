@@ -245,6 +245,9 @@ async function abrirNovoUsuario() {
 const DASH = { mensalidade: { p: 'men' }, patronal: { p: 'pat' } };
 const PSIZE = 25;
 const ANO_CORRENTE = 2026;
+// Valores válidos de patronal (R$): o resto está cadastrado errado como patronal.
+// Espelha config.valores_patronal_validos.
+const VALORES_PATRONAL = [800, 1200, 2400];
 let men_page = 0, pat_page = 0;
 let men_escopo = 'corrente', pat_escopo = 'corrente';
 const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -314,6 +317,7 @@ async function loadDashList(tipo) {
     .range(from, to);
   if (escopo === 'corrente') q = q.eq('ano', ANO_CORRENTE);
   else if (escopo === 'atrasado') q = q.lt('ano', ANO_CORRENTE);
+  if (tipo === 'patronal') q = q.in('valor', VALORES_PATRONAL);  // ignora cadastro errado
   if (status) q = q.eq('status', status);
   if (termo) q = q.ilike('empresa_razao_social', `%${termo}%`);
   const { data, count, error } = await q;
