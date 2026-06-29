@@ -79,6 +79,106 @@ function go(view) {
   $('view-title').textContent = VIEW_TITLE[view] || view;
   $('view-actions').innerHTML = '';
   if (view === 'usuarios') loadUsuarios();
+  if (view === 'empresas') {
+    $('view-actions').innerHTML =
+      '<button id="btn-sync" onclick="syncEmpresas()" class="bg-teal hover:bg-teal-dark text-white rounded-lg px-4 py-2 text-sm font-medium">↻ Sincronizar</button>';
+    empPage = 0;
+    loadEmpContadores();
+    loadEmpresas();
+  }
+}
+
+// ── Empresas ────────────────────────────────────────────
+const EMP_PAGE_SIZE = 25;
+let empPage = 0;
+let empTotal = 0;
+
+// Aplica filtro (associada/não) + busca a uma query base
+function empQuery(base) {
+  const filtro = $('emp-filtro').value;
+  const termo = $('emp-busca').value.trim();
+  if (filtro === 'assoc') base = base.eq('associado', true);
+  else if (filtro === 'nao') base = base.eq('associado', false);
+  if (termo) base = base.or(`razao_social.ilike.%${termo}%,cpf_cnpj.ilike.%${termo}%`);
+  return base;
+}
+
+async function loadEmpContadores() {
+  const totalQ = sb.from('empresas').select('*', { count: 'exact', head: true });
+  const assocQ = sb.from('empresas').select('*', { count: 'exact', head: true }).eq('associado', true);
+  const naoQ = sb.from('empresas').select('*', { count: 'exact', head: true }).eq('associado', false);
+  const [t, a, n] = await Promise.all([totalQ, assocQ, naoQ]);
+  $('emp-c-total').textContent = (t.count ?? 0).toLocaleString('pt-BR');
+  $('emp-c-assoc').textContent = (a.count ?? 0).toLocaleString('pt-BR');
+  $('emp-c-nao').textContent = (n.count ?? 0).toLocaleString('pt-BR');
+}
+
+async function loadEmpresas() {
+  const tbody = $('empresas-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" class="px-5 py-6 text-center"><span class="loader"></span></td></tr>';
+  const from = empPage * EMP_PAGE_SIZE;
+  const to = from + EMP_PAGE_SIZE - 1;
+  let q = sb.from('empresas')
+    .select('razao_social, cpf_cnpj, email, celular, telefone, associado, filiado, ativo', { count: 'exact' })
+    .order('razao_social', { nullsFirst: false })
+    .range(from, to);
+  q = empQuery(q);
+  const { data, count, error } = await q;
+  if (error) { tbody.innerHTML = `<tr><td colspan="5" class="px-5 py-6 text-center text-red-500">${error.message}</td></tr>`; return; }
+  empTotal = count ?? 0;
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="5" class="px-5 py-6 text-center text-mist">Nenhuma empresa encontrada.</td></tr>'; }
+  else tbody.innerHTML = data.map((e) => {
+    const contato = e.email || e.celular || e.telefone || '—';
+    const cobranca = e.associado
+      ? '<span class="pill pill-pago">Mensalidade</span>'
+      : '<span class="pill pill-aberto">Patronal</span>';
+    return `<tr class="table-row">
+      <td class="px-5 py-3 text-ink">${e.razao_social || '—'}</td>
+      <td class="px-5 py-3 text-mist">${e.cpf_cnpj || '—'}</td>
+      <td class="px-5 py-3 text-mist">${contato}</td>
+      <td class="px-5 py-3">${cobranca}</td>
+      <td class="px-5 py-3">${e.ativo ? '<span class="pill pill-pago">Ativa</span>' : '<span class="pill pill-vencido">Inativa</span>'}</td>
+    </tr>`;
+  }).join('');
+  const ini = empTotal ? from + 1 : 0;
+  const fim = Math.min(to + 1, empTotal);
+  $('emp-range').textContent = `${ini.toLocaleString('pt-BR')}–${fim.toLocaleString('pt-BR')} de ${empTotal.toLocaleString('pt-BR')}`;
+  $('emp-prev').disabled = empPage === 0;
+  $('emp-next').disabled = to + 1 >= empTotal;
+}
+
+function empPrev() { if (empPage > 0) { empPage--; loadEmpresas(); } }
+function empNext() { if ((empPage + 1) * EMP_PAGE_SIZE < empTotal) { empPage++; loadEmpresas(); } }
+
+// Sincroniza empresas com o High Gestor (chunks via Edge Function, em loop)
+async function syncEmpresas() {
+  const btn = $('btn-sync');
+  btn.disabled = true;
+  const { data: { session } } = await sb.auth.getSession();
+  let offset = 0, total = 0;
+  try {
+    while (true) {
+      btn.textContent = `↻ Sincronizando… ${total.toLocaleString('pt-BR')}`;
+      const res = await fetch(`${SINDITRACK_CONFIG.supabase.url}/functions/v1/higestor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ action: 'sync-empresas', offset, pages: 10 }),
+      });
+      const out = await res.json();
+      if (!res.ok) throw new Error(out.error || res.status);
+      total += out.processadas || 0;
+      if (out.next_offset == null) break;
+      offset = out.next_offset;
+    }
+    btn.textContent = `✓ ${total.toLocaleString('pt-BR')} sincronizadas`;
+    loadEmpContadores();
+    loadEmpresas();
+  } catch (e) {
+    btn.textContent = '✕ Erro ao sincronizar';
+    console.error(e);
+  } finally {
+    setTimeout(() => { btn.disabled = false; btn.textContent = '↻ Sincronizar'; }, 4000);
+  }
 }
 
 // ── Login ───────────────────────────────────────────────

@@ -162,10 +162,56 @@
 
     <!-- Empresas (Fase 1) -->
     <section id="view-empresas" class="hidden p-8">
-      <div class="bg-white rounded-xl border border-line p-10 text-center text-mist">
-        <div class="text-4xl mb-3">🏢</div>
-        <p class="font-medium text-ink mb-1">Empresas do sindicato</p>
-        <p class="text-sm">Em construção — chega na Fase 1 (sincronização com o High Gestor).</p>
+      <!-- Contadores -->
+      <div class="grid grid-cols-3 gap-4 mb-5">
+        <div class="bg-white rounded-xl border border-line p-4">
+          <div class="text-mist text-xs uppercase tracking-wider">Total</div>
+          <div id="emp-c-total" class="brand text-2xl font-semibold text-ink mt-1">—</div>
+        </div>
+        <div class="bg-white rounded-xl border border-line p-4">
+          <div class="text-mist text-xs uppercase tracking-wider">Associadas (mensalidade)</div>
+          <div id="emp-c-assoc" class="brand text-2xl font-semibold text-teal mt-1">—</div>
+        </div>
+        <div class="bg-white rounded-xl border border-line p-4">
+          <div class="text-mist text-xs uppercase tracking-wider">Não-associadas (patronal)</div>
+          <div id="emp-c-nao" class="brand text-2xl font-semibold text-amber mt-1">—</div>
+        </div>
+      </div>
+
+      <!-- Filtros -->
+      <div class="flex items-center gap-3 mb-4">
+        <input id="emp-busca" type="text" placeholder="Buscar por razão social ou CNPJ…" onkeydown="if(event.key==='Enter'){empPage=0;loadEmpresas()}"
+               class="flex-1 bg-white border border-line rounded-lg px-4 py-2.5 text-sm text-ink" />
+        <select id="emp-filtro" onchange="empPage=0;loadEmpresas()" class="bg-white border border-line rounded-lg px-3 py-2.5 text-sm text-ink">
+          <option value="todas">Todas</option>
+          <option value="assoc">Associadas</option>
+          <option value="nao">Não-associadas</option>
+        </select>
+        <button onclick="empPage=0;loadEmpresas()" class="bg-cream border border-line text-ink rounded-lg px-4 py-2.5 text-sm font-medium">Buscar</button>
+      </div>
+
+      <div class="bg-white rounded-xl border border-line overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-cream text-mist text-xs uppercase tracking-wider">
+            <tr>
+              <th class="text-left px-5 py-3">Razão social</th>
+              <th class="text-left px-5 py-3">CNPJ</th>
+              <th class="text-left px-5 py-3">Contato</th>
+              <th class="text-left px-5 py-3">Cobrança</th>
+              <th class="text-left px-5 py-3">Status</th>
+            </tr>
+          </thead>
+          <tbody id="empresas-tbody" class="divide-y divide-line"></tbody>
+        </table>
+      </div>
+
+      <!-- Paginação -->
+      <div class="flex items-center justify-between mt-4 text-sm text-mist">
+        <span id="emp-range">—</span>
+        <div class="flex items-center gap-2">
+          <button id="emp-prev" onclick="empPrev()" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">‹ Anterior</button>
+          <button id="emp-next" onclick="empNext()" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">Próxima ›</button>
+        </div>
       </div>
     </section>
 
