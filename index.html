@@ -135,19 +135,61 @@
 
     <!-- Mensalidades (Fase 2) -->
     <section id="view-mensalidades" class="p-8">
-      <div class="bg-white rounded-xl border border-line p-10 text-center text-mist">
-        <div class="text-4xl mb-3">📅</div>
-        <p class="font-medium text-ink mb-1">Acompanhamento de mensalidades</p>
-        <p class="text-sm">Em construção — chega na Fase 2 (sincronização de recebimentos).</p>
+      <div class="flex items-center gap-3 mb-5">
+        <label class="text-mist text-sm">Mês</label>
+        <select id="men-comp" onchange="men_page=0;loadDash('mensalidade')" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink"></select>
+        <div class="flex-1"></div>
+        <input id="men-busca" type="text" placeholder="Buscar empresa…" onkeydown="if(event.key==='Enter'){men_page=0;loadDashList('mensalidade')}" class="bg-white border border-line rounded-lg px-4 py-2 text-sm text-ink w-64" />
+        <select id="men-status" onchange="men_page=0;loadDashList('mensalidade')" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink">
+          <option value="">Todos os status</option><option value="pago">Pago</option><option value="aberto">Em aberto</option><option value="vencido">Vencido</option>
+        </select>
+      </div>
+      <div id="men-cards" class="grid grid-cols-4 gap-4 mb-5"></div>
+      <div class="bg-white rounded-xl border border-line overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-cream text-mist text-xs uppercase tracking-wider"><tr>
+            <th class="text-left px-5 py-3">Empresa</th><th class="text-left px-5 py-3">Referência</th>
+            <th class="text-left px-5 py-3">Valor</th><th class="text-left px-5 py-3">Vencimento</th><th class="text-left px-5 py-3">Status</th>
+          </tr></thead>
+          <tbody id="men-tbody" class="divide-y divide-line"></tbody>
+        </table>
+      </div>
+      <div class="flex items-center justify-between mt-4 text-sm text-mist">
+        <span id="men-range">—</span>
+        <div class="flex items-center gap-2">
+          <button id="men-prev" onclick="dashPrev('mensalidade')" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">‹ Anterior</button>
+          <button id="men-next" onclick="dashNext('mensalidade')" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">Próxima ›</button>
+        </div>
       </div>
     </section>
 
     <!-- Patronais (Fase 2) -->
     <section id="view-patronais" class="hidden p-8">
-      <div class="bg-white rounded-xl border border-line p-10 text-center text-mist">
-        <div class="text-4xl mb-3">🏛️</div>
-        <p class="font-medium text-ink mb-1">Contribuição patronal anual</p>
-        <p class="text-sm">Em construção — chega na Fase 2.</p>
+      <div class="flex items-center gap-3 mb-5">
+        <label class="text-mist text-sm">Exercício</label>
+        <select id="pat-comp" onchange="pat_page=0;loadDash('patronal')" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink"></select>
+        <div class="flex-1"></div>
+        <input id="pat-busca" type="text" placeholder="Buscar empresa…" onkeydown="if(event.key==='Enter'){pat_page=0;loadDashList('patronal')}" class="bg-white border border-line rounded-lg px-4 py-2 text-sm text-ink w-64" />
+        <select id="pat-status" onchange="pat_page=0;loadDashList('patronal')" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink">
+          <option value="">Todos os status</option><option value="pago">Pago</option><option value="aberto">Em aberto</option><option value="vencido">Vencido</option>
+        </select>
+      </div>
+      <div id="pat-cards" class="grid grid-cols-4 gap-4 mb-5"></div>
+      <div class="bg-white rounded-xl border border-line overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-cream text-mist text-xs uppercase tracking-wider"><tr>
+            <th class="text-left px-5 py-3">Empresa</th><th class="text-left px-5 py-3">Referência</th>
+            <th class="text-left px-5 py-3">Valor</th><th class="text-left px-5 py-3">Vencimento</th><th class="text-left px-5 py-3">Status</th>
+          </tr></thead>
+          <tbody id="pat-tbody" class="divide-y divide-line"></tbody>
+        </table>
+      </div>
+      <div class="flex items-center justify-between mt-4 text-sm text-mist">
+        <span id="pat-range">—</span>
+        <div class="flex items-center gap-2">
+          <button id="pat-prev" onclick="dashPrev('patronal')" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">‹ Anterior</button>
+          <button id="pat-next" onclick="dashNext('patronal')" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">Próxima ›</button>
+        </div>
       </div>
     </section>
 
