@@ -133,17 +133,27 @@
       <div id="view-actions" class="flex items-center gap-2"></div>
     </header>
 
-    <!-- Mensalidades (Fase 2) -->
+    <!-- Mensalidades — visão mensal (linha do tempo 12 meses + drill-down) -->
     <section id="view-mensalidades" class="p-8">
       <div class="flex items-center gap-3 mb-5">
-        <div id="men-escopo" class="inline-flex rounded-lg border border-line overflow-hidden text-sm"></div>
+        <label class="text-mist text-sm">Ano</label>
+        <select id="men-ano" onchange="men_mes=null;loadMensal()" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink"></select>
         <div class="flex-1"></div>
-        <input id="men-busca" type="text" placeholder="Buscar empresa…" onkeydown="if(event.key==='Enter'){men_page=0;loadDashList('mensalidade')}" class="bg-white border border-line rounded-lg px-4 py-2 text-sm text-ink w-64" />
-        <select id="men-status" onchange="men_page=0;loadDashList('mensalidade')" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink">
+        <button id="men-anotodo" onclick="men_mes=null;men_page=0;loadMensalDetalhe()" class="text-sm text-teal font-medium hidden">Ver ano todo ✕</button>
+      </div>
+
+      <!-- Linha do tempo: 12 meses clicáveis -->
+      <div id="men-timeline" class="grid grid-cols-6 gap-3 mb-7"></div>
+
+      <!-- Detalhe (mês selecionado ou ano todo) -->
+      <p id="men-detalhe-titulo" class="brand text-lg font-semibold text-ink mb-3">Ano todo</p>
+      <div id="men-cards" class="grid grid-cols-4 gap-4 mb-5"></div>
+      <div class="flex items-center gap-3 mb-4">
+        <input id="men-busca" type="text" placeholder="Buscar empresa…" onkeydown="if(event.key==='Enter'){men_page=0;loadMensalLista()}" class="bg-white border border-line rounded-lg px-4 py-2 text-sm text-ink w-64" />
+        <select id="men-status" onchange="men_page=0;loadMensalLista()" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink">
           <option value="">Todos os status</option><option value="pago">Pago</option><option value="aberto">Em aberto</option><option value="vencido">Vencido</option>
         </select>
       </div>
-      <div id="men-cards" class="grid grid-cols-4 gap-4 mb-5"></div>
       <div class="bg-white rounded-xl border border-line overflow-hidden">
         <table class="w-full text-sm">
           <thead class="bg-cream text-mist text-xs uppercase tracking-wider"><tr>
@@ -156,8 +166,8 @@
       <div class="flex items-center justify-between mt-4 text-sm text-mist">
         <span id="men-range">—</span>
         <div class="flex items-center gap-2">
-          <button id="men-prev" onclick="dashPrev('mensalidade')" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">‹ Anterior</button>
-          <button id="men-next" onclick="dashNext('mensalidade')" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">Próxima ›</button>
+          <button id="men-prev" onclick="menPrev()" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">‹ Anterior</button>
+          <button id="men-next" onclick="menNext()" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">Próxima ›</button>
         </div>
       </div>
     </section>
