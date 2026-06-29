@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SindiTrack — Cobrança Sindical</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Sora:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // ── Identidade SindiTrack ──────────────────────────────────────────
+    //   teal  = #0E7C7B (primária, sidebar, ações)   ink = #0F2A2A (texto)
+    //   amber = #E0A100 (acento financeiro, com parcimônia)
+    //   mist  = #5E7A78 (texto secundário)  · cream = #F3F7F6 (superfícies)
+    tailwind.config = {
+      theme: { extend: {
+        colors: {
+          teal: { DEFAULT: '#0E7C7B', dark: '#0A5E5D', light: '#159392' },
+          ink:  { DEFAULT: '#0F2A2A', light: '#1C3D3C' },
+          amber:{ DEFAULT: '#E0A100', light: '#F2B92E' },
+          mist: '#5E7A78',
+          cream:'#F3F7F6',
+          line: '#DCE6E5',
+        },
+        fontFamily: { sans: ['Inter','sans-serif'], brand: ['Sora','sans-serif'] },
+      } },
+    };
+  </script>
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    body { background: #E4ECEB; }
+    .brand { font-family: 'Sora', sans-serif; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #0E7C7B !important; }
+    .sidebar-item { transition: all .15s; cursor: pointer; }
+    .sidebar-item:hover { background: rgba(255,255,255,.07); }
+    .sidebar-item.active { background: rgba(255,255,255,.10); border-left: 3px solid #E0A100; color: #fff; font-weight: 500; }
+    .hidden { display: none !important; }
+    .loader { border:3px solid #DCE6E5; border-top:3px solid #0E7C7B; border-radius:50%; width:22px; height:22px; animation:spin .8s linear infinite; display:inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .papel-badge { font-size:11px; padding:2px 10px; border-radius:999px; font-weight:500; }
+    .papel-admin    { background:#0F2A2A; color:#fff; }
+    .papel-operador { background:#E4ECEB; color:#0F2A2A; }
+    .pill { font-size:11px; padding:2px 10px; border-radius:999px; font-weight:500; }
+    .pill-pago    { background:#D6F0E2; color:#0A6B40; }
+    .pill-aberto  { background:#FFF3CF; color:#8A6A00; }
+    .pill-vencido { background:#FBDAD6; color:#A12A1C; }
+    .table-row:hover { background:#F3F7F6; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════ LOGIN ═══════════════════════════════ -->
+<div id="login-screen" class="min-h-screen flex items-center justify-center relative" style="background:#E4ECEB;">
+  <div class="relative z-10 w-full max-w-sm mx-4">
+    <div class="text-center mb-8">
+      <div class="flex flex-col items-center gap-3 mb-3 text-ink">
+        <svg width="54" height="54" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="SindiTrack">
+          <rect x="4" y="4" width="40" height="40" rx="11" fill="#0E7C7B"/>
+          <path d="M14 27 L21 33 L34 17" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="34" cy="17" r="3" fill="#E0A100"/>
+        </svg>
+        <span class="brand text-3xl font-semibold tracking-tight text-ink">Sindi<span class="text-teal">Track</span></span>
+      </div>
+      <div class="text-mist text-xs tracking-[0.22em] uppercase">Cobrança & Acompanhamento</div>
+    </div>
+    <div class="bg-white rounded-2xl p-8 border border-line shadow-sm">
+      <p class="text-ink text-sm mb-6 text-center">Acesse o painel do sindicato</p>
+      <div class="space-y-4">
+        <div>
+          <label class="text-mist text-xs tracking-widest uppercase block mb-1.5">E-mail</label>
+          <input id="login-email" type="email" class="w-full bg-cream border border-line rounded-lg px-4 py-3 text-ink text-sm" placeholder="seu@email.com" />
+        </div>
+        <div>
+          <label class="text-mist text-xs tracking-widest uppercase block mb-1.5">Senha</label>
+          <input id="login-pass" type="password" class="w-full bg-cream border border-line rounded-lg px-4 py-3 text-ink text-sm" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()" />
+        </div>
+        <div id="login-error" class="text-red-500 text-sm hidden"></div>
+        <button onclick="doLogin()" class="w-full bg-teal hover:bg-teal-dark text-white rounded-lg py-3 text-sm font-medium transition-colors mt-2">Entrar</button>
+      </div>
+    </div>
+    <p class="text-center text-mist text-xs mt-6">SindiTrack — gestão de mensalidades e contribuição patronal</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SEM ACESSO ═══════════════════════════════ -->
+<div id="no-access" class="hidden min-h-screen flex items-center justify-center">
+  <div class="bg-white rounded-2xl p-8 border border-line shadow-sm max-w-sm text-center mx-4">
+    <p class="text-ink font-medium mb-2">Acesso não liberado</p>
+    <p class="text-mist text-sm mb-5">Seu login existe, mas ainda não tem perfil ativo no SindiTrack. Fale com o administrador.</p>
+    <button onclick="sb.auth.signOut().then(()=>location.reload())" class="text-teal text-sm font-medium">Sair</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ APP ═══════════════════════════════ -->
+<div id="app" class="hidden flex min-h-screen">
+
+  <!-- Sidebar -->
+  <aside class="w-64 bg-ink flex flex-col shrink-0">
+    <div class="px-6 py-6 border-b border-white/10 flex justify-center">
+      <div class="flex items-center gap-2.5 text-white">
+        <svg width="30" height="30" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="4" width="40" height="40" rx="11" fill="#0E7C7B"/>
+          <path d="M14 27 L21 33 L34 17" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="34" cy="17" r="3" fill="#E0A100"/>
+        </svg>
+        <span class="brand text-lg font-semibold tracking-tight">Sindi<span class="text-teal-light">Track</span></span>
+      </div>
+    </div>
+    <nav class="flex-1 px-3 py-5 space-y-1 text-sm text-slate-300">
+      <a data-view="mensalidades" onclick="go('mensalidades')" class="sidebar-item active flex items-center gap-3 px-3 py-2.5 rounded-lg"><span>📅</span> Mensalidades</a>
+      <a data-view="patronais" onclick="go('patronais')" class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400"><span>🏛️</span> Patronais</a>
+      <a data-view="geracao" onclick="go('geracao')" class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400"><span>🧾</span> Geração de boletos</a>
+      <a data-view="empresas" onclick="go('empresas')" class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400"><span>🏢</span> Empresas</a>
+      <div class="pt-4 mt-2 border-t border-white/10"></div>
+      <a data-view="config" data-roles="admin" onclick="go('config')" class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400"><span>⚙️</span> Configurações</a>
+      <a data-view="usuarios" data-roles="admin" onclick="go('usuarios')" class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400"><span>🔐</span> Usuários</a>
+    </nav>
+    <div class="px-4 py-4 border-t border-white/10 flex items-center gap-3">
+      <div class="w-9 h-9 rounded-full bg-teal flex items-center justify-center text-white text-sm font-semibold" id="user-initial">U</div>
+      <div class="flex-1 min-w-0">
+        <div class="text-white text-sm truncate" id="user-display">—</div>
+        <span class="papel-badge" id="user-papel">—</span>
+      </div>
+      <button onclick="sb.auth.signOut().then(()=>location.reload())" title="Sair" class="text-slate-400 hover:text-white">⏻</button>
+    </div>
+  </aside>
+
+  <!-- Conteúdo -->
+  <main class="flex-1 overflow-auto">
+    <header class="bg-white border-b border-line px-8 py-5 flex items-center justify-between sticky top-0 z-10">
+      <h2 id="view-title" class="brand text-2xl font-semibold text-ink leading-none">Mensalidades</h2>
+      <div id="view-actions" class="flex items-center gap-2"></div>
+    </header>
+
+    <!-- Mensalidades (Fase 2) -->
+    <section id="view-mensalidades" class="p-8">
+      <div class="bg-white rounded-xl border border-line p-10 text-center text-mist">
+        <div class="text-4xl mb-3">📅</div>
+        <p class="font-medium text-ink mb-1">Acompanhamento de mensalidades</p>
+        <p class="text-sm">Em construção — chega na Fase 2 (sincronização de recebimentos).</p>
+      </div>
+    </section>
+
+    <!-- Patronais (Fase 2) -->
+    <section id="view-patronais" class="hidden p-8">
+      <div class="bg-white rounded-xl border border-line p-10 text-center text-mist">
+        <div class="text-4xl mb-3">🏛️</div>
+        <p class="font-medium text-ink mb-1">Contribuição patronal anual</p>
+        <p class="text-sm">Em construção — chega na Fase 2.</p>
+      </div>
+    </section>
+
+    <!-- Geração (Fase 3) -->
+    <section id="view-geracao" class="hidden p-8">
+      <div class="bg-white rounded-xl border border-line p-10 text-center text-mist">
+        <div class="text-4xl mb-3">🧾</div>
+        <p class="font-medium text-ink mb-1">Geração de boletos em lote</p>
+        <p class="text-sm">Em construção — chega na Fase 3 (rascunho → aprovação → emissão).</p>
+      </div>
+    </section>
+
+    <!-- Empresas (Fase 1) -->
+    <section id="view-empresas" class="hidden p-8">
+      <div class="bg-white rounded-xl border border-line p-10 text-center text-mist">
+        <div class="text-4xl mb-3">🏢</div>
+        <p class="font-medium text-ink mb-1">Empresas do sindicato</p>
+        <p class="text-sm">Em construção — chega na Fase 1 (sincronização com o High Gestor).</p>
+      </div>
+    </section>
+
+    <!-- Configurações (admin, Fase 1) -->
+    <section id="view-config" class="hidden p-8">
+      <div class="bg-white rounded-xl border border-line p-10 text-center text-mist">
+        <div class="text-4xl mb-3">⚙️</div>
+        <p class="font-medium text-ink mb-1">Configurações</p>
+        <p class="text-sm">IDs de cobrança, valores e templates — Fase 1.</p>
+      </div>
+    </section>
+
+    <!-- Usuários (admin) -->
+    <section id="view-usuarios" class="hidden p-8">
+      <div class="flex items-center justify-between mb-5">
+        <p class="text-mist text-sm">Operadores com acesso ao painel.</p>
+        <button onclick="abrirNovoUsuario()" class="bg-teal hover:bg-teal-dark text-white rounded-lg px-4 py-2 text-sm font-medium">+ Novo usuário</button>
+      </div>
+      <div class="bg-white rounded-xl border border-line overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-cream text-mist text-xs uppercase tracking-wider">
+            <tr><th class="text-left px-5 py-3">Nome</th><th class="text-left px-5 py-3">E-mail</th><th class="text-left px-5 py-3">Papel</th><th class="text-left px-5 py-3">Status</th></tr>
+          </thead>
+          <tbody id="usuarios-tbody" class="divide-y divide-line"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

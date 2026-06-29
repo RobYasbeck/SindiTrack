@@ -7,3 +7,7 @@ build/
 *.log
 .DS_Store
 Thumbs.db
+
+# Supabase (estado local do link — não versionar)
+supabase/.temp/
+supabase/.branches/
