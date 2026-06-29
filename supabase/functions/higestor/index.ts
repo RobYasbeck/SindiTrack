@@ -101,18 +101,25 @@ const RESEND_FROM = Deno.env.get('RESEND_FROM') ?? '';
 const brl = (v: any) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const dataBR = (d: string | null) => (d ? d.split('-').reverse().join('/') : '');
 
-// Substitui {placeholders} do template pelos dados do recebimento
+// Substitui {placeholders} do template pelos dados do recebimento.
+// Linhas cujo ÚNICO placeholder está vazio são removidas (ex.: "Boleto: {link_boleto}"
+// some quando não há link), evitando rótulos órfãos.
 function preencheTemplate(tpl: string, r: any) {
   const map: Record<string, string> = {
     nome: r.empresa_razao_social ?? '',
     referencia: r.referencia ?? '',
     valor: brl(r.valor),
     vencimento: dataBR(r.data_vencimento),
-    linha_digitavel: r.linha_digitavel ?? '—',
-    codigo_pix: r.codigo_pix ?? '—',
+    linha_digitavel: r.linha_digitavel ?? '',
+    codigo_pix: r.codigo_pix ?? '',
     link_boleto: r.link_boleto ?? '',
   };
-  return tpl.replace(/\{(\w+)\}/g, (_, k) => map[k] ?? '');
+  const linhas = tpl.split('\n').filter((linha) => {
+    const phs = linha.match(/\{(\w+)\}/g);
+    if (phs && phs.length === 1) return !!map[phs[0].slice(1, -1)];
+    return true;
+  });
+  return linhas.join('\n').replace(/\{(\w+)\}/g, (_, k) => map[k] ?? '');
 }
 
 // Só dígitos + DDI 55 para o JID do WhatsApp
@@ -343,7 +350,8 @@ Deno.serve(async (req) => {
         } catch (e) { await logar('whatsapp', jid, false, String((e as Error).message)); }
       }
       if (canais.includes('email')) {
-        const to = emp?.email || null;
+        // modo teste: body.email_to sobrescreve o destinatário (manda pra você, não pra empresa)
+        const to = body.email_to || emp?.email || null;
         try {
           if (!RESEND_KEY || !RESEND_FROM) throw new Error('Resend não configurado (RESEND_API_KEY/RESEND_FROM)');
           if (!to) throw new Error('Sem e-mail');
