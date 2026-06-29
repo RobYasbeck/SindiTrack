@@ -490,7 +490,7 @@ async function enviarLote(loteId) {
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 const MESES_LONGO = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 let men_ano = ANO_CORRENTE;
-let men_mes = null;        // null = ano todo; 1-12 = mês selecionado
+let men_mes = new Date().getMonth() + 1;   // abre no mês atual (1-12); null = ano todo
 let men_dados = [];        // resumo por mês do ano selecionado
 
 async function loadMensal() {
@@ -503,6 +503,13 @@ async function loadMensal() {
     selAno.innerHTML = anos.map((a) => `<option value="${a}">${a}</option>`).join('');
     selAno.value = String(men_ano);
     selAno.dataset.loaded = '1';
+  }
+  // popula o seletor de mês (uma vez)
+  const selMesEl = $('men-mes-sel');
+  if (selMesEl.dataset.loaded !== '1') {
+    selMesEl.innerHTML = '<option value="">Ano todo</option>' +
+      MESES_LONGO.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+    selMesEl.dataset.loaded = '1';
   }
   men_ano = Number(selAno.value);
   // dados mensais
@@ -543,8 +550,16 @@ function selMes(m) {
   loadMensalDetalhe();
 }
 
+// Mudança pelo dropdown de mês ('' = ano todo)
+function selMesDropdown(v) {
+  men_mes = v === '' ? null : Number(v);
+  men_page = 0;
+  renderTimeline();
+  loadMensalDetalhe();
+}
+
 function loadMensalDetalhe() {
-  $('men-anotodo').classList.toggle('hidden', men_mes === null);
+  $('men-mes-sel').value = men_mes === null ? '' : String(men_mes);  // sincroniza o dropdown
   $('men-detalhe-titulo').textContent = men_mes
     ? `${MESES_LONGO[men_mes - 1]} de ${men_ano}` : `Ano de ${men_ano} (todos os meses)`;
   // cards: mês selecionado, ou soma do ano

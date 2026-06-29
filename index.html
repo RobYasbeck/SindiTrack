@@ -137,9 +137,10 @@
     <section id="view-mensalidades" class="p-8">
       <div class="flex items-center gap-3 mb-5">
         <label class="text-mist text-sm">Ano</label>
-        <select id="men-ano" onchange="men_mes=null;loadMensal()" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink"></select>
+        <select id="men-ano" onchange="loadMensal()" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink"></select>
+        <label class="text-mist text-sm ml-2">Mês</label>
+        <select id="men-mes-sel" onchange="selMesDropdown(this.value)" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink"></select>
         <div class="flex-1"></div>
-        <button id="men-anotodo" onclick="men_mes=null;men_page=0;loadMensalDetalhe()" class="text-sm text-teal font-medium hidden">Ver ano todo ✕</button>
       </div>
 
       <!-- Linha do tempo: 12 meses clicáveis -->
