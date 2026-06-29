@@ -136,8 +136,7 @@
     <!-- Mensalidades (Fase 2) -->
     <section id="view-mensalidades" class="p-8">
       <div class="flex items-center gap-3 mb-5">
-        <label class="text-mist text-sm">Mês</label>
-        <select id="men-comp" onchange="men_page=0;loadDash('mensalidade')" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink"></select>
+        <div id="men-escopo" class="inline-flex rounded-lg border border-line overflow-hidden text-sm"></div>
         <div class="flex-1"></div>
         <input id="men-busca" type="text" placeholder="Buscar empresa…" onkeydown="if(event.key==='Enter'){men_page=0;loadDashList('mensalidade')}" class="bg-white border border-line rounded-lg px-4 py-2 text-sm text-ink w-64" />
         <select id="men-status" onchange="men_page=0;loadDashList('mensalidade')" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink">
@@ -166,8 +165,7 @@
     <!-- Patronais (Fase 2) -->
     <section id="view-patronais" class="hidden p-8">
       <div class="flex items-center gap-3 mb-5">
-        <label class="text-mist text-sm">Exercício</label>
-        <select id="pat-comp" onchange="pat_page=0;loadDash('patronal')" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink"></select>
+        <div id="pat-escopo" class="inline-flex rounded-lg border border-line overflow-hidden text-sm"></div>
         <div class="flex-1"></div>
         <input id="pat-busca" type="text" placeholder="Buscar empresa…" onkeydown="if(event.key==='Enter'){pat_page=0;loadDashList('patronal')}" class="bg-white border border-line rounded-lg px-4 py-2 text-sm text-ink w-64" />
         <select id="pat-status" onchange="pat_page=0;loadDashList('patronal')" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink">
@@ -193,13 +191,50 @@
       </div>
     </section>
 
-    <!-- Geração (Fase 3) -->
+    <!-- Geração (Fase 3 + 4) -->
     <section id="view-geracao" class="hidden p-8">
-      <div class="bg-white rounded-xl border border-line p-10 text-center text-mist">
-        <div class="text-4xl mb-3">🧾</div>
-        <p class="font-medium text-ink mb-1">Geração de boletos em lote</p>
-        <p class="text-sm">Em construção — chega na Fase 3 (rascunho → aprovação → emissão).</p>
+      <!-- Montar lote -->
+      <div class="bg-white rounded-xl border border-line p-6 mb-6">
+        <p class="font-medium text-ink mb-1">Montar lote de cobrança</p>
+        <p class="text-mist text-sm mb-4">Gera um rascunho com quem deve ser cobrado e ainda não tem boleto da competência. Você revisa antes de emitir.</p>
+        <div class="flex flex-wrap items-end gap-3">
+          <div>
+            <label class="text-mist text-xs uppercase tracking-wider block mb-1">Tipo</label>
+            <select id="ger-tipo" onchange="gerTipoChange()" class="bg-cream border border-line rounded-lg px-3 py-2 text-sm text-ink">
+              <option value="patronal">Patronal (anual)</option>
+              <option value="mensalidade">Mensalidade (mensal)</option>
+            </select>
+          </div>
+          <div id="ger-comp-ano">
+            <label class="text-mist text-xs uppercase tracking-wider block mb-1">Exercício</label>
+            <input id="ger-exercicio" type="number" value="2026" class="bg-cream border border-line rounded-lg px-3 py-2 text-sm text-ink w-28" />
+          </div>
+          <div id="ger-comp-mes" class="hidden">
+            <label class="text-mist text-xs uppercase tracking-wider block mb-1">Mês de referência</label>
+            <input id="ger-mes" type="month" class="bg-cream border border-line rounded-lg px-3 py-2 text-sm text-ink" />
+          </div>
+          <div>
+            <label class="text-mist text-xs uppercase tracking-wider block mb-1">Vencimento</label>
+            <input id="ger-venc" type="date" class="bg-cream border border-line rounded-lg px-3 py-2 text-sm text-ink" />
+          </div>
+          <button onclick="montarLote()" class="bg-ink hover:bg-ink-light text-white rounded-lg px-5 py-2 text-sm font-medium">Montar rascunho</button>
+        </div>
+        <div id="ger-msg" class="text-sm mt-3"></div>
       </div>
+
+      <!-- Lotes existentes -->
+      <p class="text-mist text-xs uppercase tracking-wider mb-2">Lotes</p>
+      <div class="bg-white rounded-xl border border-line overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-cream text-mist text-xs uppercase tracking-wider"><tr>
+            <th class="text-left px-5 py-3">Tipo</th><th class="text-left px-5 py-3">Competência</th>
+            <th class="text-left px-5 py-3">Itens</th><th class="text-left px-5 py-3">Status</th>
+            <th class="text-right px-5 py-3">Ações</th>
+          </tr></thead>
+          <tbody id="lotes-tbody" class="divide-y divide-line"></tbody>
+        </table>
+      </div>
+      <div id="ger-prog" class="hidden mt-4 bg-white rounded-xl border border-line p-4 text-sm text-ink"></div>
     </section>
 
     <!-- Empresas (Fase 1) -->

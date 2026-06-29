@@ -92,6 +92,56 @@ function mapRecebimento(r: any, tipoPorCobranca: Record<number, string>) {
   };
 }
 
+// ── Envio (Fase 4): WhatsApp via Evolution + e-mail via Resend ──
+const EVO_URL = (Deno.env.get('EVOLUTION_API_URL') ?? 'https://luna.yaslabs.dev.br').replace(/\/$/, '');
+const EVO_KEY = Deno.env.get('EVOLUTION_API_KEY') ?? '';
+const RESEND_KEY = Deno.env.get('RESEND_API_KEY') ?? '';
+const RESEND_FROM = Deno.env.get('RESEND_FROM') ?? '';
+
+const brl = (v: any) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const dataBR = (d: string | null) => (d ? d.split('-').reverse().join('/') : '');
+
+// Substitui {placeholders} do template pelos dados do recebimento
+function preencheTemplate(tpl: string, r: any) {
+  const map: Record<string, string> = {
+    nome: r.empresa_razao_social ?? '',
+    referencia: r.referencia ?? '',
+    valor: brl(r.valor),
+    vencimento: dataBR(r.data_vencimento),
+    linha_digitavel: r.linha_digitavel ?? '—',
+    codigo_pix: r.codigo_pix ?? '—',
+    link_boleto: r.link_boleto ?? '',
+  };
+  return tpl.replace(/\{(\w+)\}/g, (_, k) => map[k] ?? '');
+}
+
+// Só dígitos + DDI 55 para o JID do WhatsApp
+function toJid(celular: string | null): string | null {
+  if (!celular) return null;
+  let d = celular.replace(/\D/g, '');
+  if (d.length < 10) return null;
+  if (!d.startsWith('55')) d = '55' + d;
+  return `${d}@s.whatsapp.net`;
+}
+
+async function sendWhatsApp(instance: string, jid: string, text: string) {
+  const res = await fetch(`${EVO_URL}/message/sendText/${instance}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: EVO_KEY },
+    body: JSON.stringify({ number: jid, text }),
+  });
+  if (!res.ok) throw new Error(`Evolution HTTP ${res.status}: ${(await res.text()).slice(0, 120)}`);
+}
+
+async function sendEmail(to: string, subject: string, text: string) {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${RESEND_KEY}` },
+    body: JSON.stringify({ from: RESEND_FROM, to, subject, text }),
+  });
+  if (!res.ok) throw new Error(`Resend HTTP ${res.status}: ${(await res.text()).slice(0, 120)}`);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
@@ -189,6 +239,119 @@ Deno.serve(async (req) => {
       }
 
       return json({ ok: true, processadas, total_estimado: total, next_offset: offset < 0 ? null : offset });
+    }
+
+    // Emite os boletos de um lote APROVADO no High Gestor (em batch; cliente chama em loop).
+    if (action === 'gerar-lote') {
+      const loteId = body.lote_id;
+      const batch = Math.min(Number(body.batch) || 25, 80);
+      const { data: lote } = await admin.from('lotes').select('*').eq('id', loteId).maybeSingle();
+      if (!lote) return json({ error: 'Lote não encontrado' }, 404);
+      if (!['aprovado', 'gerado'].includes(lote.status)) return json({ error: 'Lote não está aprovado' }, 400);
+
+      const { data: cfg } = await admin.from('config').select('cobranca_id_mensalidade, cobranca_id_patronal').eq('id', 1).single();
+      const cobranca = lote.tipo === 'mensalidade' ? cfg!.cobranca_id_mensalidade : cfg!.cobranca_id_patronal;
+      if (!cobranca) return json({ error: 'cobranca_id não configurado para ' + lote.tipo }, 400);
+
+      const { data: items } = await admin.from('lote_itens')
+        .select('id, valor, data_vencimento, empresas(higestor_id, cpf_cnpj, razao_social, associado)')
+        .eq('lote_id', loteId).eq('status', 'pendente').limit(batch);
+
+      let gerados = 0, erros = 0;
+      for (const it of items ?? []) {
+        const emp: any = it.empresas;
+        const ref = lote.tipo === 'mensalidade'
+          ? `Mensalidade ${lote.competencia}` : `Contribuição Patronal ${lote.competencia}`;
+        const attrs: any = {
+          entidade_cpf_cnpj: emp.cpf_cnpj, referencia: ref,
+          data_vencimento: it.data_vencimento, valor: Number(it.valor), cobranca_id: Number(cobranca),
+        };
+        if (lote.tipo === 'mensalidade') attrs.mes_referencia = lote.competencia;
+        try {
+          const res = await fetch(`${HG_BASE}/recebimentos`, {
+            method: 'POST',
+            headers: { 'Auth-Token': token, 'Content-Type': 'application/vnd.api+json', Accept: HG_ACCEPT },
+            body: JSON.stringify({ data: { type: 'Recebimento', attributes: attrs } }),
+          });
+          const out = await res.json().catch(() => ({}));
+          if (!res.ok || !(out.sucess || out.success)) throw new Error(out.error || `HTTP ${res.status}`);
+          const newId = Number(Array.isArray(out.id) ? out.id[0] : out.id);
+          const link = Array.isArray(out.links) ? out.links[0] : out.links;
+
+          await admin.from('recebimentos').upsert({
+            higestor_id: newId, empresa_higestor_id: emp.higestor_id, empresa_cpf_cnpj: emp.cpf_cnpj,
+            empresa_razao_social: emp.razao_social, empresa_associado: emp.associado, tipo: lote.tipo,
+            cobranca_id: Number(cobranca), referencia: ref,
+            mes_referencia: lote.tipo === 'mensalidade' ? lote.competencia : null,
+            exercicio: lote.tipo === 'patronal' ? lote.competencia : null,
+            valor: Number(it.valor), valor_pago: 0, status: 'aberto',
+            data_vencimento: it.data_vencimento, link_boleto: link, last_sync: new Date().toISOString(),
+          }, { onConflict: 'higestor_id' });
+          const { data: rec } = await admin.from('recebimentos').select('id').eq('higestor_id', newId).single();
+          await admin.from('lote_itens').update({ status: 'gerado', recebimento_id: rec!.id, erro: null }).eq('id', it.id);
+          gerados++;
+        } catch (e) {
+          await admin.from('lote_itens').update({ status: 'erro', erro: String((e as Error).message) }).eq('id', it.id);
+          erros++;
+        }
+      }
+      const { count: restantes } = await admin.from('lote_itens')
+        .select('*', { count: 'exact', head: true }).eq('lote_id', loteId).eq('status', 'pendente');
+      if ((restantes ?? 0) === 0) await admin.from('lotes').update({ status: 'gerado', gerado_at: new Date().toISOString() }).eq('id', loteId);
+      return json({ ok: true, gerados, erros, restantes: restantes ?? 0 });
+    }
+
+    // Encaminha o boleto de UM recebimento (WhatsApp e/ou e-mail) e registra em envios.
+    if (action === 'enviar-boleto') {
+      const recId = body.recebimento_id;
+      const canais: string[] = body.canais ?? ['whatsapp', 'email'];
+      const { data: rec } = await admin.from('recebimentos').select('*').eq('id', recId).maybeSingle();
+      if (!rec) return json({ error: 'Recebimento não encontrado' }, 404);
+
+      // completa dados do boleto se faltarem (linha digitável/pix/link) via GET /recebimentos/{id}
+      if (!rec.linha_digitavel || !rec.link_boleto) {
+        try {
+          const det = await hgGet(`/recebimentos/${rec.higestor_id}`, token);
+          const a = det.data?.attributes ?? {};
+          const upd: any = {};
+          if (a.linha_digitavel) upd.linha_digitavel = a.linha_digitavel;
+          if (a.codigo_pix) upd.codigo_pix = a.codigo_pix;
+          if (a.codigo_barra) upd.codigo_barra = a.codigo_barra;
+          if (a.nosso_numero) upd.nosso_numero = a.nosso_numero;
+          if (Object.keys(upd).length) { await admin.from('recebimentos').update(upd).eq('id', recId); Object.assign(rec, upd); }
+        } catch { /* segue com o que tem */ }
+      }
+
+      const { data: cfg } = await admin.from('config')
+        .select('instancia_evolution, template_whatsapp, template_email_assunto, template_email_corpo').eq('id', 1).single();
+      const { data: emp } = await admin.from('empresas')
+        .select('email, celular, telefone').eq('higestor_id', rec.empresa_higestor_id).maybeSingle();
+
+      const resultados: any[] = [];
+      const logar = async (canal: string, destino: string | null, ok: boolean, erro?: string) => {
+        await admin.from('envios').insert({ recebimento_id: recId, canal, destino, status: ok ? 'enviado' : 'erro', erro: erro ?? null });
+        resultados.push({ canal, destino, ok, erro });
+      };
+
+      if (canais.includes('whatsapp')) {
+        const jid = toJid(emp?.celular || emp?.telefone || null);
+        try {
+          if (!EVO_KEY || !cfg?.instancia_evolution) throw new Error('Evolution não configurado (instância/secret)');
+          if (!jid) throw new Error('Sem celular válido');
+          await sendWhatsApp(cfg.instancia_evolution, jid, preencheTemplate(cfg.template_whatsapp, rec));
+          await logar('whatsapp', jid, true);
+        } catch (e) { await logar('whatsapp', jid, false, String((e as Error).message)); }
+      }
+      if (canais.includes('email')) {
+        const to = emp?.email || null;
+        try {
+          if (!RESEND_KEY || !RESEND_FROM) throw new Error('Resend não configurado (RESEND_API_KEY/RESEND_FROM)');
+          if (!to) throw new Error('Sem e-mail');
+          await sendEmail(to, preencheTemplate(cfg!.template_email_assunto, rec), preencheTemplate(cfg!.template_email_corpo, rec));
+          await logar('email', to, true);
+        } catch (e) { await logar('email', to, false, String((e as Error).message)); }
+      }
+      return json({ ok: resultados.some((r) => r.ok), resultados });
     }
 
     return json({ error: 'Ação desconhecida: ' + action }, 400);

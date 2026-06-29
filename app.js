@@ -79,6 +79,7 @@ function go(view) {
   $('view-title').textContent = VIEW_TITLE[view] || view;
   $('view-actions').innerHTML = '';
   if (view === 'usuarios') loadUsuarios();
+  if (view === 'geracao') loadLotes();
   if (view === 'mensalidades' || view === 'patronais') {
     const tipo = view === 'mensalidades' ? 'mensalidade' : 'patronal';
     $('view-actions').innerHTML =
@@ -239,7 +240,9 @@ async function abrirNovoUsuario() {
 // ── Dashboards (mensalidade / patronal) ────────────────
 const DASH = { mensalidade: { p: 'men' }, patronal: { p: 'pat' } };
 const PSIZE = 25;
+const ANO_CORRENTE = 2026;
 let men_page = 0, pat_page = 0;
+let men_escopo = 'corrente', pat_escopo = 'corrente';
 const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const STATUS_PILL = {
   pago: '<span class="pill pill-pago">Pago</span>',
@@ -250,24 +253,36 @@ const STATUS_PILL = {
 };
 const dashPage = (t) => (t === 'mensalidade' ? men_page : pat_page);
 const dashSetPage = (t, v) => { if (t === 'mensalidade') men_page = v; else pat_page = v; };
+const dashEscopo = (t) => (t === 'mensalidade' ? men_escopo : pat_escopo);
+
+const ESCOPOS = [
+  ['corrente', `Corrente (${ANO_CORRENTE})`],
+  ['atrasado', 'Atrasados'],
+  ['todos', 'Todos'],
+];
+function setEscopo(tipo, esc) {
+  if (tipo === 'mensalidade') men_escopo = esc; else pat_escopo = esc;
+  dashSetPage(tipo, 0);
+  loadDash(tipo);
+}
+
+function renderEscopo(tipo) {
+  const p = DASH[tipo].p;
+  $(`${p}-escopo`).innerHTML = ESCOPOS.map(([v, label]) => {
+    const on = dashEscopo(tipo) === v;
+    return `<button onclick="setEscopo('${tipo}','${v}')" class="px-4 py-2 ${on ? 'bg-teal text-white' : 'bg-white text-mist'} border-r border-line last:border-r-0">${label}</button>`;
+  }).join('');
+}
 
 async function loadDash(tipo) {
-  const p = DASH[tipo].p;
-  const sel = $(`${p}-comp`);
-  if (sel.dataset.loaded !== '1') {
-    const { data } = await sb.rpc('competencias', { p_tipo: tipo });
-    sel.innerHTML = '<option value="">Todas</option>' +
-      (data || []).map((r) => `<option value="${r.competencia}">${r.competencia}</option>`).join('');
-    sel.dataset.loaded = '1';
-  }
+  renderEscopo(tipo);
   loadDashResumo(tipo);
   loadDashList(tipo);
 }
 
 async function loadDashResumo(tipo) {
   const p = DASH[tipo].p;
-  const comp = $(`${p}-comp`).value || null;
-  const { data } = await sb.rpc('resumo_recebimentos', { p_tipo: tipo, p_competencia: comp });
+  const { data } = await sb.rpc('resumo_por_escopo', { p_tipo: tipo, p_escopo: dashEscopo(tipo) });
   const r = data || {};
   const card = (label, qtd, valor, cls) => `<div class="bg-white rounded-xl border border-line p-4">
       <div class="text-mist text-xs uppercase tracking-wider">${label}</div>
@@ -284,7 +299,7 @@ async function loadDashList(tipo) {
   const p = DASH[tipo].p;
   const tbody = $(`${p}-tbody`);
   tbody.innerHTML = '<tr><td colspan="5" class="px-5 py-6 text-center"><span class="loader"></span></td></tr>';
-  const comp = $(`${p}-comp`).value;
+  const escopo = dashEscopo(tipo);
   const status = $(`${p}-status`).value;
   const termo = $(`${p}-busca`).value.trim();
   const from = dashPage(tipo) * PSIZE, to = from + PSIZE - 1;
@@ -293,7 +308,8 @@ async function loadDashList(tipo) {
     .eq('tipo', tipo)
     .order('data_vencimento', { ascending: false, nullsFirst: false })
     .range(from, to);
-  if (comp) q = tipo === 'mensalidade' ? q.eq('mes_referencia', comp) : q.eq('exercicio', comp);
+  if (escopo === 'corrente') q = q.eq('ano', ANO_CORRENTE);
+  else if (escopo === 'atrasado') q = q.lt('ano', ANO_CORRENTE);
   if (status) q = q.eq('status', status);
   if (termo) q = q.ilike('empresa_razao_social', `%${termo}%`);
   const { data, count, error } = await q;
@@ -349,6 +365,117 @@ async function syncRecebimentos(tipo) {
   } finally {
     setTimeout(() => { btn.disabled = false; btn.textContent = '↻ Sincronizar'; }, 4000);
   }
+}
+
+// ── Geração de boletos (Fase 3 + envio Fase 4) ──────────
+async function callFn(payload) {
+  const { data: { session } } = await sb.auth.getSession();
+  const res = await fetch(`${SINDITRACK_CONFIG.supabase.url}/functions/v1/higestor`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify(payload),
+  });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(out.error || res.status);
+  return out;
+}
+
+function gerTipoChange() {
+  const t = $('ger-tipo').value;
+  $('ger-comp-ano').classList.toggle('hidden', t !== 'patronal');
+  $('ger-comp-mes').classList.toggle('hidden', t !== 'mensalidade');
+}
+
+async function montarLote() {
+  const tipo = $('ger-tipo').value;
+  const venc = $('ger-venc').value;
+  const msg = $('ger-msg');
+  if (!venc) { msg.innerHTML = '<span class="text-red-500">Informe a data de vencimento.</span>'; return; }
+  let competencia;
+  if (tipo === 'patronal') competencia = $('ger-exercicio').value.trim();
+  else {
+    const m = $('ger-mes').value; // 'YYYY-MM'
+    if (!m) { msg.innerHTML = '<span class="text-red-500">Informe o mês.</span>'; return; }
+    const [y, mm] = m.split('-'); competencia = `${mm}/${y}`;
+  }
+  msg.innerHTML = '<span class="loader"></span> Montando…';
+  const { data, error } = await sb.rpc('montar_lote', { p_tipo: tipo, p_competencia: competencia, p_data_vencimento: venc });
+  if (error) { msg.innerHTML = `<span class="text-red-500">${error.message}</span>`; return; }
+  msg.innerHTML = `<span class="text-teal">✓ Rascunho pronto: ${data.total_itens.toLocaleString('pt-BR')} boletos de ${Number(data.valor_unitario).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.</span>`;
+  loadLotes();
+}
+
+async function loadLotes() {
+  const tbody = $('lotes-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" class="px-5 py-6 text-center"><span class="loader"></span></td></tr>';
+  const { data, error } = await sb.from('lotes')
+    .select('id, tipo, competencia, status, total_itens').order('created_at', { ascending: false });
+  if (error) { tbody.innerHTML = `<tr><td colspan="5" class="px-5 py-6 text-center text-red-500">${error.message}</td></tr>`; return; }
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="5" class="px-5 py-6 text-center text-mist">Nenhum lote ainda.</td></tr>'; return; }
+  const STAT = {
+    rascunho: '<span class="pill pill-aberto">Rascunho</span>',
+    aprovado: '<span class="pill" style="background:#D9E7FB;color:#1B5FB0">Aprovado</span>',
+    gerado: '<span class="pill pill-pago">Gerado</span>',
+    cancelado: '<span class="pill pill-vencido">Cancelado</span>',
+  };
+  tbody.innerHTML = data.map((l) => {
+    let acoes = '';
+    if (l.status === 'rascunho') acoes = `<button onclick="aprovarGerar('${l.id}')" class="bg-teal hover:bg-teal-dark text-white rounded-lg px-3 py-1.5 text-xs font-medium">Aprovar e emitir</button>`;
+    else if (l.status === 'aprovado') acoes = `<button onclick="gerarLote('${l.id}')" class="bg-teal hover:bg-teal-dark text-white rounded-lg px-3 py-1.5 text-xs font-medium">Continuar emissão</button>`;
+    else if (l.status === 'gerado') acoes = `<button onclick="enviarLote('${l.id}')" class="bg-amber hover:bg-amber-light text-white rounded-lg px-3 py-1.5 text-xs font-medium">Enviar boletos</button>`;
+    return `<tr class="table-row">
+      <td class="px-5 py-3 text-ink">${l.tipo === 'patronal' ? 'Patronal' : 'Mensalidade'}</td>
+      <td class="px-5 py-3 text-mist">${l.competencia}</td>
+      <td class="px-5 py-3 text-ink">${(l.total_itens || 0).toLocaleString('pt-BR')}</td>
+      <td class="px-5 py-3">${STAT[l.status] || l.status}</td>
+      <td class="px-5 py-3 text-right">${acoes}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function aprovarGerar(loteId) {
+  if (!confirm('Isso vai EMITIR os boletos no High Gestor (ação real). Confirmar?')) return;
+  const { error } = await sb.rpc('aprovar_lote', { p_lote_id: loteId });
+  if (error) { alert('Erro ao aprovar: ' + error.message); return; }
+  gerarLote(loteId);
+}
+
+async function gerarLote(loteId) {
+  const prog = $('ger-prog');
+  prog.classList.remove('hidden');
+  let gerados = 0, erros = 0;
+  try {
+    while (true) {
+      const out = await callFn({ action: 'gerar-lote', lote_id: loteId, batch: 50 });
+      gerados += out.gerados; erros += out.erros;
+      prog.innerHTML = `Emitindo… <b>${gerados.toLocaleString('pt-BR')}</b> gerados, ${erros} erros, ${out.restantes.toLocaleString('pt-BR')} restantes.`;
+      if (out.restantes === 0) break;
+    }
+    prog.innerHTML = `✓ Lote emitido: <b>${gerados.toLocaleString('pt-BR')}</b> boletos${erros ? `, ${erros} com erro` : ''}.`;
+    loadLotes();
+  } catch (e) {
+    prog.innerHTML = `<span class="text-red-500">Erro na emissão: ${e.message}</span> (${gerados} já gerados — dá pra continuar)`;
+    loadLotes();
+  }
+}
+
+async function enviarLote(loteId) {
+  if (!confirm('Enviar o boleto (WhatsApp + e-mail) para todos os itens gerados deste lote?')) return;
+  const prog = $('ger-prog');
+  prog.classList.remove('hidden');
+  const { data: itens, error } = await sb.from('lote_itens')
+    .select('recebimento_id').eq('lote_id', loteId).eq('status', 'gerado').not('recebimento_id', 'is', null);
+  if (error) { prog.innerHTML = `<span class="text-red-500">${error.message}</span>`; return; }
+  let ok = 0, falha = 0;
+  for (let i = 0; i < itens.length; i++) {
+    try {
+      const out = await callFn({ action: 'enviar-boleto', recebimento_id: itens[i].recebimento_id });
+      out.ok ? ok++ : falha++;
+    } catch { falha++; }
+    if (i % 10 === 0 || i === itens.length - 1)
+      prog.innerHTML = `Enviando… ${i + 1}/${itens.length} — ${ok} ok, ${falha} falha.`;
+  }
+  prog.innerHTML = `✓ Envio concluído: ${ok} enviados, ${falha} falhas.`;
 }
 
 checkSession();
