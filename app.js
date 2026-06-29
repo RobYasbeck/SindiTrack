@@ -459,8 +459,12 @@ async function gerarLote(loteId) {
   }
 }
 
+// Canais de envio ativos. WhatsApp desligado por ora (números frios → erro 463);
+// religar é só incluir 'whatsapp' aqui.
+const CANAIS_ENVIO = ['email'];
+
 async function enviarLote(loteId) {
-  if (!confirm('Enviar o boleto (WhatsApp + e-mail) para todos os itens gerados deste lote?')) return;
+  if (!confirm('Enviar o boleto por e-mail para todos os itens gerados deste lote?')) return;
   const prog = $('ger-prog');
   prog.classList.remove('hidden');
   const { data: itens, error } = await sb.from('lote_itens')
@@ -469,7 +473,7 @@ async function enviarLote(loteId) {
   let ok = 0, falha = 0;
   for (let i = 0; i < itens.length; i++) {
     try {
-      const out = await callFn({ action: 'enviar-boleto', recebimento_id: itens[i].recebimento_id });
+      const out = await callFn({ action: 'enviar-boleto', recebimento_id: itens[i].recebimento_id, canais: CANAIS_ENVIO });
       out.ok ? ok++ : falha++;
     } catch { falha++; }
     if (i % 10 === 0 || i === itens.length - 1)
