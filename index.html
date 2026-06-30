@@ -176,10 +176,11 @@
     <!-- Patronais (Fase 2) -->
     <section id="view-patronais" class="hidden p-8">
       <div class="flex items-center gap-3 mb-5">
-        <div id="pat-escopo" class="inline-flex rounded-lg border border-line overflow-hidden text-sm"></div>
+        <label class="text-mist text-sm">Ano</label>
+        <select id="pat-ano" onchange="selPatAno(this.value)" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink"></select>
         <div class="flex-1"></div>
-        <input id="pat-busca" type="text" placeholder="Buscar empresa…" onkeydown="if(event.key==='Enter'){pat_page=0;loadDashList('patronal')}" class="bg-white border border-line rounded-lg px-4 py-2 text-sm text-ink w-64" />
-        <select id="pat-status" onchange="pat_page=0;loadDashList('patronal')" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink">
+        <input id="pat-busca" type="text" placeholder="Buscar empresa…" onkeydown="if(event.key==='Enter'){pat_page=0;loadPatronalLista()}" class="bg-white border border-line rounded-lg px-4 py-2 text-sm text-ink w-64" />
+        <select id="pat-status" onchange="pat_page=0;loadPatronalLista()" class="bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink">
           <option value="">Todos os status</option><option value="pago">Pago</option><option value="aberto">Em aberto</option><option value="vencido">Vencido</option>
         </select>
       </div>
@@ -196,8 +197,8 @@
       <div class="flex items-center justify-between mt-4 text-sm text-mist">
         <span id="pat-range">—</span>
         <div class="flex items-center gap-2">
-          <button id="pat-prev" onclick="dashPrev('patronal')" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">‹ Anterior</button>
-          <button id="pat-next" onclick="dashNext('patronal')" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">Próxima ›</button>
+          <button id="pat-prev" onclick="patPrev()" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">‹ Anterior</button>
+          <button id="pat-next" onclick="patNext()" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">Próxima ›</button>
         </div>
       </div>
     </section>

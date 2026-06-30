@@ -88,7 +88,7 @@ function go(view) {
   if (view === 'patronais') {
     $('view-actions').innerHTML =
       `<button id="btn-sync-r" onclick="syncRecebimentos('patronal')" class="bg-teal hover:bg-teal-dark text-white rounded-lg px-4 py-2 text-sm font-medium">↻ Sincronizar</button>`;
-    loadDash('patronal');
+    loadPatronal();
   }
   if (view === 'empresas') {
     $('view-actions').innerHTML =
@@ -242,14 +242,14 @@ async function abrirNovoUsuario() {
 }
 
 // ── Dashboards (mensalidade / patronal) ────────────────
-const DASH = { mensalidade: { p: 'men' }, patronal: { p: 'pat' } };
 const PSIZE = 25;
 const ANO_CORRENTE = 2026;
 // Valores válidos de patronal (R$): o resto está cadastrado errado como patronal.
 // Espelha config.valores_patronal_validos.
 const VALORES_PATRONAL = [800, 1200, 2400];
-let men_page = 0, pat_page = 0;
-let men_escopo = 'corrente', pat_escopo = 'corrente';
+let men_page = 0;
+let pat_page = 0;
+let pat_ano = ANO_CORRENTE;   // null = todos os anos
 const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const STATUS_PILL = {
   pago: '<span class="pill pill-pago">Pago</span>',
@@ -258,66 +258,49 @@ const STATUS_PILL = {
   cancelado: '<span class="pill" style="background:#E4ECEB;color:#5E7A78">Cancelado</span>',
   expirado: '<span class="pill" style="background:#E4ECEB;color:#5E7A78">Expirado</span>',
 };
-const dashPage = (t) => (t === 'mensalidade' ? men_page : pat_page);
-const dashSetPage = (t, v) => { if (t === 'mensalidade') men_page = v; else pat_page = v; };
-const dashEscopo = (t) => (t === 'mensalidade' ? men_escopo : pat_escopo);
 
-const ESCOPOS = [
-  ['corrente', `Corrente (${ANO_CORRENTE})`],
-  ['atrasado', 'Atrasados'],
-  ['todos', 'Todos'],
-];
-function setEscopo(tipo, esc) {
-  if (tipo === 'mensalidade') men_escopo = esc; else pat_escopo = esc;
-  dashSetPage(tipo, 0);
-  loadDash(tipo);
+// ── Patronal — filtro por ano ───────────────────────────
+async function loadPatronal() {
+  const sel = $('pat-ano');
+  if (sel.dataset.loaded !== '1') {
+    const { data } = await sb.rpc('anos_por_tipo', { p_tipo: 'patronal' });
+    const anos = (data || []).map((r) => r.ano);
+    if (!anos.includes(ANO_CORRENTE)) anos.unshift(ANO_CORRENTE);
+    sel.innerHTML = anos.map((a) => `<option value="${a}">${a}</option>`).join('') + '<option value="">Todos os anos</option>';
+    sel.value = String(pat_ano);
+    sel.dataset.loaded = '1';
+  }
+  pat_ano = sel.value === '' ? null : Number(sel.value);
+  loadPatronalResumo();
+  loadPatronalLista();
 }
 
-function renderEscopo(tipo) {
-  const p = DASH[tipo].p;
-  $(`${p}-escopo`).innerHTML = ESCOPOS.map(([v, label]) => {
-    const on = dashEscopo(tipo) === v;
-    return `<button onclick="setEscopo('${tipo}','${v}')" class="px-4 py-2 ${on ? 'bg-teal text-white' : 'bg-white text-mist'} border-r border-line last:border-r-0">${label}</button>`;
-  }).join('');
-}
-
-async function loadDash(tipo) {
-  renderEscopo(tipo);
-  loadDashResumo(tipo);
-  loadDashList(tipo);
-}
-
-async function loadDashResumo(tipo) {
-  const p = DASH[tipo].p;
-  const { data } = await sb.rpc('resumo_por_escopo', { p_tipo: tipo, p_escopo: dashEscopo(tipo) });
+async function loadPatronalResumo() {
+  const { data } = await sb.rpc('resumo_ano', { p_tipo: 'patronal', p_ano: pat_ano });
   const r = data || {};
   const card = (label, qtd, valor, cls) => `<div class="bg-white rounded-xl border border-line p-4">
       <div class="text-mist text-xs uppercase tracking-wider">${label}</div>
       <div class="brand text-2xl font-semibold ${cls} mt-1">${brl(valor)}</div>
       <div class="text-mist text-xs mt-0.5">${(qtd || 0).toLocaleString('pt-BR')} boletos</div></div>`;
-  $(`${p}-cards`).innerHTML =
+  $('pat-cards').innerHTML =
     card('Total', r.total_qtd, r.total_valor, 'text-ink') +
     card('Pago', r.pago_qtd, r.pago_valor, 'text-teal') +
     card('Em aberto', r.aberto_qtd, r.aberto_valor, 'text-amber') +
     card('Vencido', r.vencido_qtd, r.vencido_valor, 'text-red-600');
 }
 
-async function loadDashList(tipo) {
-  const p = DASH[tipo].p;
-  const tbody = $(`${p}-tbody`);
+async function loadPatronalLista() {
+  const tbody = $('pat-tbody');
   tbody.innerHTML = '<tr><td colspan="5" class="px-5 py-6 text-center"><span class="loader"></span></td></tr>';
-  const escopo = dashEscopo(tipo);
-  const status = $(`${p}-status`).value;
-  const termo = $(`${p}-busca`).value.trim();
-  const from = dashPage(tipo) * PSIZE, to = from + PSIZE - 1;
+  const status = $('pat-status').value;
+  const termo = $('pat-busca').value.trim();
+  const from = pat_page * PSIZE, to = from + PSIZE - 1;
   let q = sb.from('recebimentos')
-    .select('empresa_razao_social, referencia, mes_referencia, exercicio, valor, data_vencimento, status', { count: 'exact' })
-    .eq('tipo', tipo)
+    .select('empresa_razao_social, referencia, exercicio, valor, data_vencimento, status', { count: 'exact' })
+    .eq('tipo', 'patronal').in('valor', VALORES_PATRONAL)
     .order('data_vencimento', { ascending: false, nullsFirst: false })
     .range(from, to);
-  if (escopo === 'corrente') q = q.eq('ano', ANO_CORRENTE);
-  else if (escopo === 'atrasado') q = q.lt('ano', ANO_CORRENTE);
-  if (tipo === 'patronal') q = q.in('valor', VALORES_PATRONAL);  // ignora cadastro errado
+  if (pat_ano !== null) q = q.eq('ano', pat_ano);
   if (status) q = q.eq('status', status);
   if (termo) q = q.ilike('empresa_razao_social', `%${termo}%`);
   const { data, count, error } = await q;
@@ -325,24 +308,24 @@ async function loadDashList(tipo) {
   const total = count ?? 0;
   if (!data.length) { tbody.innerHTML = '<tr><td colspan="5" class="px-5 py-6 text-center text-mist">Nenhum recebimento.</td></tr>'; }
   else tbody.innerHTML = data.map((x) => {
-    const ref = (tipo === 'mensalidade' ? x.mes_referencia : x.exercicio) || x.referencia || '—';
     const venc = x.data_vencimento ? x.data_vencimento.split('-').reverse().join('/') : '—';
     return `<tr class="table-row">
       <td class="px-5 py-3 text-ink">${x.empresa_razao_social || '—'}</td>
-      <td class="px-5 py-3 text-mist">${ref}</td>
+      <td class="px-5 py-3 text-mist">${x.referencia || x.exercicio || '—'}</td>
       <td class="px-5 py-3 text-ink">${brl(x.valor)}</td>
       <td class="px-5 py-3 text-mist">${venc}</td>
       <td class="px-5 py-3">${STATUS_PILL[x.status] || x.status || '—'}</td>
     </tr>`;
   }).join('');
   const ini = total ? from + 1 : 0, fim = Math.min(to + 1, total);
-  $(`${p}-range`).textContent = `${ini.toLocaleString('pt-BR')}–${fim.toLocaleString('pt-BR')} de ${total.toLocaleString('pt-BR')}`;
-  $(`${p}-prev`).disabled = dashPage(tipo) === 0;
-  $(`${p}-next`).disabled = to + 1 >= total;
+  $('pat-range').textContent = `${ini.toLocaleString('pt-BR')}–${fim.toLocaleString('pt-BR')} de ${total.toLocaleString('pt-BR')}`;
+  $('pat-prev').disabled = pat_page === 0;
+  $('pat-next').disabled = to + 1 >= total;
 }
 
-function dashPrev(tipo) { if (dashPage(tipo) > 0) { dashSetPage(tipo, dashPage(tipo) - 1); loadDashList(tipo); } }
-function dashNext(tipo) { dashSetPage(tipo, dashPage(tipo) + 1); loadDashList(tipo); }
+function selPatAno(v) { pat_ano = v === '' ? null : Number(v); pat_page = 0; loadPatronalResumo(); loadPatronalLista(); }
+function patPrev() { if (pat_page > 0) { pat_page--; loadPatronalLista(); } }
+function patNext() { pat_page++; loadPatronalLista(); }
 
 // Sincroniza recebimentos com o High Gestor (chunks via Edge Function, em loop)
 async function syncRecebimentos(tipo) {
@@ -366,7 +349,7 @@ async function syncRecebimentos(tipo) {
       offset = out.next_offset;
     }
     btn.textContent = `✓ ${total.toLocaleString('pt-BR')} sincronizados`;
-    loadDash(tipo);
+    if (tipo === 'mensalidade') loadMensal(); else loadPatronal();
   } catch (e) {
     btn.textContent = '✕ Erro ao sincronizar';
     console.error(e);
