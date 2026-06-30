@@ -425,10 +425,11 @@ async function loadLotes() {
     cancelado: '<span class="pill pill-vencido">Cancelado</span>',
   };
   tbody.innerHTML = data.map((l) => {
-    let acoes = '';
-    if (l.status === 'rascunho') acoes = `<button onclick="aprovarGerar('${l.id}')" class="bg-teal hover:bg-teal-dark text-white rounded-lg px-3 py-1.5 text-xs font-medium">Aprovar e emitir</button>`;
-    else if (l.status === 'aprovado') acoes = `<button onclick="gerarLote('${l.id}')" class="bg-teal hover:bg-teal-dark text-white rounded-lg px-3 py-1.5 text-xs font-medium">Continuar emissão</button>`;
-    else if (l.status === 'gerado') acoes = `<button onclick="enviarLote('${l.id}')" class="bg-amber hover:bg-amber-light text-white rounded-lg px-3 py-1.5 text-xs font-medium">Enviar boletos</button>`;
+    const ver = `<button onclick="verItens('${l.id}')" class="border border-line text-ink rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-cream">Ver</button>`;
+    let acoes = ver + ' ';
+    if (l.status === 'rascunho') acoes += `<button onclick="aprovarGerar('${l.id}')" class="bg-teal hover:bg-teal-dark text-white rounded-lg px-3 py-1.5 text-xs font-medium">Aprovar e emitir</button>`;
+    else if (l.status === 'aprovado') acoes += `<button onclick="gerarLote('${l.id}')" class="bg-teal hover:bg-teal-dark text-white rounded-lg px-3 py-1.5 text-xs font-medium">Continuar emissão</button>`;
+    else if (l.status === 'gerado') acoes += `<button onclick="enviarLote('${l.id}')" class="bg-amber hover:bg-amber-light text-white rounded-lg px-3 py-1.5 text-xs font-medium">Enviar boletos</button>`;
     const tipoLabel = { patronal: 'Patronal', mensalidade: 'Mensalidade', renovacao: 'Renovar associados' }[l.tipo] || l.tipo;
     return `<tr class="table-row">
       <td class="px-5 py-3 text-ink">${tipoLabel}</td>
@@ -439,6 +440,62 @@ async function loadLotes() {
     </tr>`;
   }).join('');
 }
+
+// ── Itens do lote (revisar antes de emitir) ─────────────
+let itensLote = null, itens_page = 0;
+const ITEM_STATUS = {
+  pendente: '<span class="pill pill-aberto">A gerar</span>',
+  gerado: '<span class="pill pill-pago">Gerado</span>',
+  erro: '<span class="pill pill-vencido">Erro</span>',
+};
+
+async function verItens(loteId) {
+  itensLote = loteId;
+  itens_page = 0;
+  $('ger-itens').classList.remove('hidden');
+  const { data: lote } = await sb.from('lotes').select('tipo, competencia').eq('id', loteId).maybeSingle();
+  const tipoLabel = { patronal: 'Patronal', mensalidade: 'Mensalidade', renovacao: 'Renovar associados' }[lote?.tipo] || lote?.tipo;
+  $('itens-titulo').textContent = `Boletos — ${tipoLabel} ${lote?.competencia || ''}`;
+  const { data: r } = await sb.rpc('resumo_lote', { p_lote: loteId });
+  if (r) $('itens-resumo').innerHTML =
+    `<b>${(r.qtd || 0).toLocaleString('pt-BR')}</b> boletos · total <b>${brl(r.valor)}</b> · ` +
+    `${r.pendente_qtd} a gerar, ${r.gerado_qtd} gerados${r.erro_qtd ? `, ${r.erro_qtd} com erro` : ''}`;
+  loadItens();
+  $('ger-itens').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function loadItens() {
+  const tbody = $('itens-tbody');
+  tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-6 text-center"><span class="loader"></span></td></tr>';
+  const from = itens_page * PSIZE, to = from + PSIZE - 1;
+  const { data, count, error } = await sb.from('lote_itens')
+    .select('valor, mes_referencia, data_vencimento, status, erro, empresas(razao_social, cpf_cnpj)', { count: 'exact' })
+    .eq('lote_id', itensLote)
+    .order('mes_referencia')
+    .range(from, to);
+  if (error) { tbody.innerHTML = `<tr><td colspan="6" class="px-5 py-6 text-center text-red-500">${error.message}</td></tr>`; return; }
+  const total = count ?? 0;
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-6 text-center text-mist">Sem itens.</td></tr>'; }
+  else tbody.innerHTML = data.map((x) => {
+    const emp = x.empresas || {};
+    const venc = x.data_vencimento ? x.data_vencimento.split('-').reverse().join('/') : '—';
+    const sit = (ITEM_STATUS[x.status] || x.status) + (x.erro ? ` <span class="text-mist" title="${x.erro}">⚠︎</span>` : '');
+    return `<tr class="table-row">
+      <td class="px-5 py-3 text-ink">${emp.razao_social || '—'}</td>
+      <td class="px-5 py-3 text-mist">${emp.cpf_cnpj || '—'}</td>
+      <td class="px-5 py-3 text-mist">${x.mes_referencia || '—'}</td>
+      <td class="px-5 py-3 text-ink">${brl(x.valor)}</td>
+      <td class="px-5 py-3 text-mist">${venc}</td>
+      <td class="px-5 py-3">${sit}</td>
+    </tr>`;
+  }).join('');
+  const ini = total ? from + 1 : 0, fim = Math.min(to + 1, total);
+  $('itens-range').textContent = `${ini.toLocaleString('pt-BR')}–${fim.toLocaleString('pt-BR')} de ${total.toLocaleString('pt-BR')}`;
+  $('itens-prev').disabled = itens_page === 0;
+  $('itens-next').disabled = to + 1 >= total;
+}
+function itensPrev() { if (itens_page > 0) { itens_page--; loadItens(); } }
+function itensNext() { itens_page++; loadItens(); }
 
 async function aprovarGerar(loteId) {
   if (!confirm('Isso vai EMITIR os boletos no High Gestor (ação real). Confirmar?')) return;

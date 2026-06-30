@@ -249,6 +249,32 @@
         </table>
       </div>
       <div id="ger-prog" class="hidden mt-4 bg-white rounded-xl border border-line p-4 text-sm text-ink"></div>
+
+      <!-- Itens do lote selecionado -->
+      <div id="ger-itens" class="hidden mt-7">
+        <div class="flex items-center justify-between mb-3">
+          <p id="itens-titulo" class="brand text-lg font-semibold text-ink">Boletos do lote</p>
+          <button onclick="$('ger-itens').classList.add('hidden')" class="text-sm text-mist hover:text-ink">Fechar ✕</button>
+        </div>
+        <div id="itens-resumo" class="text-sm text-mist mb-3"></div>
+        <div class="bg-white rounded-xl border border-line overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-cream text-mist text-xs uppercase tracking-wider"><tr>
+              <th class="text-left px-5 py-3">Empresa</th><th class="text-left px-5 py-3">CNPJ</th>
+              <th class="text-left px-5 py-3">Referência</th><th class="text-left px-5 py-3">Valor</th>
+              <th class="text-left px-5 py-3">Vencimento</th><th class="text-left px-5 py-3">Situação</th>
+            </tr></thead>
+            <tbody id="itens-tbody" class="divide-y divide-line"></tbody>
+          </table>
+        </div>
+        <div class="flex items-center justify-between mt-4 text-sm text-mist">
+          <span id="itens-range">—</span>
+          <div class="flex items-center gap-2">
+            <button id="itens-prev" onclick="itensPrev()" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">‹ Anterior</button>
+            <button id="itens-next" onclick="itensNext()" class="px-3 py-1.5 rounded-lg border border-line bg-white disabled:opacity-40">Próxima ›</button>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- Empresas (Fase 1) -->
