@@ -373,14 +373,30 @@ async function callFn(payload) {
 
 function gerTipoChange() {
   const t = $('ger-tipo').value;
-  $('ger-comp-ano').classList.toggle('hidden', t !== 'patronal');
+  // patronal e renovação usam ANO; mensalidade usa mês; renovação não pede vencimento (dia padrão por mês)
+  $('ger-comp-ano').classList.toggle('hidden', t === 'mensalidade');
   $('ger-comp-mes').classList.toggle('hidden', t !== 'mensalidade');
+  $('ger-comp-venc').classList.toggle('hidden', t === 'renovacao');
+  $('ger-hint').classList.toggle('hidden', t !== 'renovacao');
 }
 
 async function montarLote() {
   const tipo = $('ger-tipo').value;
-  const venc = $('ger-venc').value;
   const msg = $('ger-msg');
+  msg.innerHTML = '<span class="loader"></span> Montando…';
+
+  // Renovar associados: RPC própria (12 meses faltantes por associado)
+  if (tipo === 'renovacao') {
+    const ano = parseInt($('ger-exercicio').value, 10);
+    if (!ano) { msg.innerHTML = '<span class="text-red-500">Informe o ano.</span>'; return; }
+    const { data, error } = await sb.rpc('montar_renovacao', { p_ano: ano });
+    if (error) { msg.innerHTML = `<span class="text-red-500">${error.message}</span>`; return; }
+    msg.innerHTML = `<span class="text-teal">✓ Rascunho pronto: ${data.total_itens.toLocaleString('pt-BR')} mensalidades a gerar (meses que faltam aos associados).</span>`;
+    loadLotes();
+    return;
+  }
+
+  const venc = $('ger-venc').value;
   if (!venc) { msg.innerHTML = '<span class="text-red-500">Informe a data de vencimento.</span>'; return; }
   let competencia;
   if (tipo === 'patronal') competencia = $('ger-exercicio').value.trim();
@@ -389,7 +405,6 @@ async function montarLote() {
     if (!m) { msg.innerHTML = '<span class="text-red-500">Informe o mês.</span>'; return; }
     const [y, mm] = m.split('-'); competencia = `${mm}/${y}`;
   }
-  msg.innerHTML = '<span class="loader"></span> Montando…';
   const { data, error } = await sb.rpc('montar_lote', { p_tipo: tipo, p_competencia: competencia, p_data_vencimento: venc });
   if (error) { msg.innerHTML = `<span class="text-red-500">${error.message}</span>`; return; }
   msg.innerHTML = `<span class="text-teal">✓ Rascunho pronto: ${data.total_itens.toLocaleString('pt-BR')} boletos de ${Number(data.valor_unitario).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.</span>`;
@@ -414,8 +429,9 @@ async function loadLotes() {
     if (l.status === 'rascunho') acoes = `<button onclick="aprovarGerar('${l.id}')" class="bg-teal hover:bg-teal-dark text-white rounded-lg px-3 py-1.5 text-xs font-medium">Aprovar e emitir</button>`;
     else if (l.status === 'aprovado') acoes = `<button onclick="gerarLote('${l.id}')" class="bg-teal hover:bg-teal-dark text-white rounded-lg px-3 py-1.5 text-xs font-medium">Continuar emissão</button>`;
     else if (l.status === 'gerado') acoes = `<button onclick="enviarLote('${l.id}')" class="bg-amber hover:bg-amber-light text-white rounded-lg px-3 py-1.5 text-xs font-medium">Enviar boletos</button>`;
+    const tipoLabel = { patronal: 'Patronal', mensalidade: 'Mensalidade', renovacao: 'Renovar associados' }[l.tipo] || l.tipo;
     return `<tr class="table-row">
-      <td class="px-5 py-3 text-ink">${l.tipo === 'patronal' ? 'Patronal' : 'Mensalidade'}</td>
+      <td class="px-5 py-3 text-ink">${tipoLabel}</td>
       <td class="px-5 py-3 text-mist">${l.competencia}</td>
       <td class="px-5 py-3 text-ink">${(l.total_itens || 0).toLocaleString('pt-BR')}</td>
       <td class="px-5 py-3">${STAT[l.status] || l.status}</td>

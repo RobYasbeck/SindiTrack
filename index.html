@@ -215,23 +215,25 @@
             <select id="ger-tipo" onchange="gerTipoChange()" class="bg-cream border border-line rounded-lg px-3 py-2 text-sm text-ink">
               <option value="patronal">Patronal (anual)</option>
               <option value="mensalidade">Mensalidade (mensal)</option>
+              <option value="renovacao">Renovar associados (12 meses)</option>
             </select>
           </div>
           <div id="ger-comp-ano">
-            <label class="text-mist text-xs uppercase tracking-wider block mb-1">Exercício</label>
+            <label class="text-mist text-xs uppercase tracking-wider block mb-1">Exercício / Ano</label>
             <input id="ger-exercicio" type="number" value="2026" class="bg-cream border border-line rounded-lg px-3 py-2 text-sm text-ink w-28" />
           </div>
           <div id="ger-comp-mes" class="hidden">
             <label class="text-mist text-xs uppercase tracking-wider block mb-1">Mês de referência</label>
             <input id="ger-mes" type="month" class="bg-cream border border-line rounded-lg px-3 py-2 text-sm text-ink" />
           </div>
-          <div>
+          <div id="ger-comp-venc">
             <label class="text-mist text-xs uppercase tracking-wider block mb-1">Vencimento</label>
             <input id="ger-venc" type="date" class="bg-cream border border-line rounded-lg px-3 py-2 text-sm text-ink" />
           </div>
           <button onclick="montarLote()" class="bg-ink hover:bg-ink-light text-white rounded-lg px-5 py-2 text-sm font-medium">Montar rascunho</button>
         </div>
         <div id="ger-msg" class="text-sm mt-3"></div>
+        <p id="ger-hint" class="text-mist text-xs mt-2 hidden">Gera as 12 mensalidades de cada associado (com mensalidade de 06/2025 pra frente) que ainda faltam no ano, vencendo no dia padrão de cada mês. Valor = mensalidade mais recente do associado (≤120 vira R$120; maior mantém).</p>
       </div>
 
       <!-- Lotes existentes -->

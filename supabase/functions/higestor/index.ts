@@ -298,24 +298,27 @@ Deno.serve(async (req) => {
       if (!lote) return json({ error: 'Lote não encontrado' }, 404);
       if (!['aprovado', 'gerado'].includes(lote.status)) return json({ error: 'Lote não está aprovado' }, 400);
 
+      // patronal usa a cobrança patronal; mensalidade e renovação usam a de mensalidade
+      const isPatronal = lote.tipo === 'patronal';
+      const tipoReceb = isPatronal ? 'patronal' : 'mensalidade';
       const { data: cfg } = await admin.from('config').select('cobranca_id_mensalidade, cobranca_id_patronal').eq('id', 1).single();
-      const cobranca = lote.tipo === 'mensalidade' ? cfg!.cobranca_id_mensalidade : cfg!.cobranca_id_patronal;
+      const cobranca = isPatronal ? cfg!.cobranca_id_patronal : cfg!.cobranca_id_mensalidade;
       if (!cobranca) return json({ error: 'cobranca_id não configurado para ' + lote.tipo }, 400);
 
       const { data: items } = await admin.from('lote_itens')
-        .select('id, valor, data_vencimento, empresas(higestor_id, cpf_cnpj, razao_social, associado)')
+        .select('id, valor, data_vencimento, mes_referencia, empresas(higestor_id, cpf_cnpj, razao_social, associado)')
         .eq('lote_id', loteId).eq('status', 'pendente').limit(batch);
 
       let gerados = 0, erros = 0;
       for (const it of items ?? []) {
         const emp: any = it.empresas;
-        const ref = lote.tipo === 'mensalidade'
-          ? `Mensalidade ${lote.competencia}` : `Contribuição Patronal ${lote.competencia}`;
+        // mensalidade/renovação: mês vem do item; patronal: referência pelo exercício do lote
+        const ref = isPatronal ? `Contribuição Patronal ${lote.competencia}` : `Mensalidade ${it.mes_referencia}`;
         const attrs: any = {
           entidade_cpf_cnpj: emp.cpf_cnpj, referencia: ref,
           data_vencimento: it.data_vencimento, valor: Number(it.valor), cobranca_id: Number(cobranca),
         };
-        if (lote.tipo === 'mensalidade') attrs.mes_referencia = lote.competencia;
+        if (!isPatronal) attrs.mes_referencia = it.mes_referencia;
         try {
           const res = await fetch(`${HG_BASE}/recebimentos`, {
             method: 'POST',
@@ -329,10 +332,10 @@ Deno.serve(async (req) => {
 
           await admin.from('recebimentos').upsert({
             higestor_id: newId, empresa_higestor_id: emp.higestor_id, empresa_cpf_cnpj: emp.cpf_cnpj,
-            empresa_razao_social: emp.razao_social, empresa_associado: emp.associado, tipo: lote.tipo,
+            empresa_razao_social: emp.razao_social, empresa_associado: emp.associado, tipo: tipoReceb,
             cobranca_id: Number(cobranca), referencia: ref,
-            mes_referencia: lote.tipo === 'mensalidade' ? lote.competencia : null,
-            exercicio: lote.tipo === 'patronal' ? lote.competencia : null,
+            mes_referencia: isPatronal ? null : it.mes_referencia,
+            exercicio: isPatronal ? lote.competencia : null,
             valor: Number(it.valor), valor_pago: 0, status: 'aberto',
             data_vencimento: it.data_vencimento, link_boleto: link, last_sync: new Date().toISOString(),
           }, { onConflict: 'higestor_id' });
