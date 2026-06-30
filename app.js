@@ -426,9 +426,10 @@ async function loadLotes() {
   };
   tbody.innerHTML = data.map((l) => {
     const ver = `<button onclick="verItens('${l.id}')" class="border border-line text-ink rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-cream">Ver</button>`;
+    const descartar = `<button onclick="descartarLote('${l.id}')" class="border border-line text-red-600 rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-red-50">Descartar</button>`;
     let acoes = ver + ' ';
-    if (l.status === 'rascunho') acoes += `<button onclick="aprovarGerar('${l.id}')" class="bg-teal hover:bg-teal-dark text-white rounded-lg px-3 py-1.5 text-xs font-medium">Aprovar e emitir</button>`;
-    else if (l.status === 'aprovado') acoes += `<button onclick="gerarLote('${l.id}')" class="bg-teal hover:bg-teal-dark text-white rounded-lg px-3 py-1.5 text-xs font-medium">Continuar emissão</button>`;
+    if (l.status === 'rascunho') acoes += `<button onclick="aprovarGerar('${l.id}')" class="bg-teal hover:bg-teal-dark text-white rounded-lg px-3 py-1.5 text-xs font-medium">Aprovar e emitir</button> ` + descartar;
+    else if (l.status === 'aprovado') acoes += `<button onclick="gerarLote('${l.id}')" class="bg-teal hover:bg-teal-dark text-white rounded-lg px-3 py-1.5 text-xs font-medium">Continuar emissão</button> ` + descartar;
     else if (l.status === 'gerado') acoes += `<button onclick="enviarLote('${l.id}')" class="bg-amber hover:bg-amber-light text-white rounded-lg px-3 py-1.5 text-xs font-medium">Enviar boletos</button>`;
     const tipoLabel = { patronal: 'Patronal', mensalidade: 'Mensalidade', renovacao: 'Renovar associados' }[l.tipo] || l.tipo;
     return `<tr class="table-row">
@@ -496,6 +497,14 @@ async function loadItens() {
 }
 function itensPrev() { if (itens_page > 0) { itens_page--; loadItens(); } }
 function itensNext() { itens_page++; loadItens(); }
+
+async function descartarLote(loteId) {
+  if (!confirm('Descartar este rascunho? Os boletos ainda não foram emitidos, então nada é cancelado no High Gestor.')) return;
+  const { error } = await sb.rpc('descartar_lote', { p_lote: loteId });
+  if (error) { alert('Erro: ' + error.message); return; }
+  $('ger-itens').classList.add('hidden');
+  loadLotes();
+}
 
 async function aprovarGerar(loteId) {
   if (!confirm('Isso vai EMITIR os boletos no High Gestor (ação real). Confirmar?')) return;
